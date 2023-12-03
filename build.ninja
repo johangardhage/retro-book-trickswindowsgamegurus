@@ -10,6 +10,26 @@ rule cc
 #  command = $cc $in $windows -o $out.
   description = Building executable $out
 
-build $builddir/demo3_2: cc $srcdir/demo3_2.cpp
+build $builddir/demo7_1: cc $srcdir/demo7_1.cpp
+build $builddir/demo7_2: cc $srcdir/demo7_2.cpp
+build $builddir/demo7_3: cc $srcdir/demo7_3.cpp
+build $builddir/demo7_7: cc $srcdir/demo7_7.cpp
+build $builddir/demo7_8: cc $srcdir/demo7_8.cpp
+build $builddir/demo7_10: cc $srcdir/demo7_10.cpp
+build $builddir/demo7_11: cc $srcdir/demo7_11.cpp
+build $builddir/demo7_13: cc $srcdir/demo7_13.cpp
+build $builddir/demo7_14: cc $srcdir/demo7_14.cpp
+build $builddir/demo7_15: cc $srcdir/demo7_15.cpp
+build $builddir/demo7_16: cc $srcdir/demo7_16.cpp
 
-build demo3_2: phony $builddir/demo3_2
+build demo7_1: phony $builddir/demo7_1
+build demo7_2: phony $builddir/demo7_2
+build demo7_3: phony $builddir/demo7_3
+build demo7_7: phony $builddir/demo7_7
+build demo7_8: phony $builddir/demo7_8
+build demo7_10: phony $builddir/demo7_10
+build demo7_11: phony $builddir/demo7_11
+build demo7_13: phony $builddir/demo7_13
+build demo7_14: phony $builddir/demo7_14
+build demo7_15: phony $builddir/demo7_15
+build demo7_16: phony $builddir/demo7_16
