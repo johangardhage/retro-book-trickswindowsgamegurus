@@ -7,7 +7,9 @@
 #ifndef _RETRO_H_
 #define _RETRO_H_
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
+#include <stdlib.h> // atoi, exit, free, malloc, rand, srand
+#include <string.h> // memcpy, memset
 #include <getopt.h> // getopt_long
 #include <libgen.h> // basename
 #include <limits.h> // INT_MIN
@@ -101,11 +103,11 @@ struct {
 	SDL_Texture *renderbuffer = NULL;
 	unsigned char *framebuffer = NULL;
 	int framebuffersize;
-	int framebufferformat;
+	SDL_PixelFormat framebufferformat;
 	unsigned int palette[RETRO_COLORS];
 	RETRO_Image *image[RETRO_MAX_IMAGES];
 	int images = 0;
-	const unsigned char *keystate;
+	const bool *keystate;
 	bool keydown[256];
 	int yoffset[RETRO_HEIGHT];
 } RETRO = { .mode = RETRO_MODE_FULLSCREEN, .stretch = false, .vsync = true, .showfps = true };
@@ -145,7 +147,7 @@ RETRO_Palette RETRO_Get6bitColor(int color)
 
 void RETRO_SetColor(int color, unsigned char r, unsigned char g, unsigned char b)
 {
-	RETRO.palette[color] = (r << 16) | (g << 8) | (b);
+	RETRO.palette[color] = 0xff000000 | (r << 16) | (g << 8) | (b);
 }
 
 void RETRO_Set6bitColor(int color, unsigned char r, unsigned char g, unsigned char b)
@@ -153,7 +155,7 @@ void RETRO_Set6bitColor(int color, unsigned char r, unsigned char g, unsigned ch
 	r = (r & 63) << 2;
 	g = (g & 63) << 2;
 	b = (b & 63) << 2;
-	RETRO.palette[color] = (r << 16) | (g << 8) | (b);
+	RETRO.palette[color] = 0xff000000 | (r << 16) | (g << 8) | (b);
 }
 
 void RETRO_SetPalette(RETRO_Palette *palette, int colors = RETRO_COLORS)
@@ -292,27 +294,31 @@ RETRO_Image *RETRO_LoadImage(const char *filename)
 void RETRO_Flip(void)
 {
 	// Copy framebuffer
-	unsigned int *pixels, pitch;
-	SDL_LockTexture(RETRO.renderbuffer, NULL, (void **)&pixels, (int *)&pitch);
+	unsigned int *pixels;
+	int pitch;
+	SDL_LockTexture(RETRO.renderbuffer, NULL, (void **)&pixels, &pitch);
 	if (RETRO.framebufferformat == SDL_PIXELFORMAT_INDEX8) {
-		for (int i = 0; i < RETRO.framebuffersize; i++) {
-			pixels[i] = RETRO.palette[RETRO.framebuffer[i]];
+		for (int y = 0; y < RETRO_HEIGHT; y++) {
+			unsigned int *row = (unsigned int *)((unsigned char *)pixels + y * pitch);
+			for (int x = 0; x < RETRO_WIDTH; x++) {
+				row[x] = RETRO.palette[RETRO.framebuffer[RETRO.yoffset[y] + x]];
+			}
 		}
-	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_RGB555 || RETRO.framebufferformat == SDL_PIXELFORMAT_RGB565) {
-		SDL_ConvertPixels(RETRO_WIDTH, RETRO_HEIGHT, RETRO.framebufferformat, RETRO.framebuffer, RETRO_WIDTH * 2, SDL_PIXELFORMAT_ARGB8888, pixels, RETRO_WIDTH * 4);
-	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_RGB888) {
-		SDL_ConvertPixels(RETRO_WIDTH, RETRO_HEIGHT, RETRO.framebufferformat, RETRO.framebuffer, RETRO_WIDTH * 3, SDL_PIXELFORMAT_ARGB8888, pixels, RETRO_WIDTH * 4);
+	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_XRGB1555 || RETRO.framebufferformat == SDL_PIXELFORMAT_RGB565) {
+		SDL_ConvertPixels(RETRO_WIDTH, RETRO_HEIGHT, RETRO.framebufferformat, RETRO.framebuffer, RETRO_WIDTH * 2, SDL_PIXELFORMAT_ARGB8888, pixels, pitch);
+	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_XRGB8888) {
+		SDL_ConvertPixels(RETRO_WIDTH, RETRO_HEIGHT, RETRO.framebufferformat, RETRO.framebuffer, RETRO_WIDTH * 3, SDL_PIXELFORMAT_ARGB8888, pixels, pitch);
 	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_ARGB8888) {
-		SDL_ConvertPixels(RETRO_WIDTH, RETRO_HEIGHT, RETRO.framebufferformat, RETRO.framebuffer, RETRO_WIDTH * 4, SDL_PIXELFORMAT_ARGB8888, pixels, RETRO_WIDTH * 4);
+		SDL_ConvertPixels(RETRO_WIDTH, RETRO_HEIGHT, RETRO.framebufferformat, RETRO.framebuffer, RETRO_WIDTH * 4, SDL_PIXELFORMAT_ARGB8888, pixels, pitch);
 	}
 	SDL_UnlockTexture(RETRO.renderbuffer);
 
 	SDL_RenderClear(RETRO.renderer);
-	SDL_RenderCopy(RETRO.renderer, RETRO.renderbuffer, NULL, NULL);
+	SDL_RenderTexture(RETRO.renderer, RETRO.renderbuffer, NULL, NULL);
 	SDL_RenderPresent(RETRO.renderer);
 }
 
-void RETRO_InitFrameBuffer(int format)
+void RETRO_InitFrameBuffer(SDL_PixelFormat format)
 {
 	// Free old framebuffer
 	if (RETRO.framebuffer) {
@@ -323,9 +329,9 @@ void RETRO_InitFrameBuffer(int format)
 	RETRO.framebufferformat = format;
 	if (RETRO.framebufferformat == SDL_PIXELFORMAT_INDEX8) {
 		RETRO.framebuffersize = RETRO_WIDTH * RETRO_HEIGHT;
-	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_RGB555 || RETRO.framebufferformat == SDL_PIXELFORMAT_RGB565) {
+	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_XRGB1555 || RETRO.framebufferformat == SDL_PIXELFORMAT_RGB565) {
 		RETRO.framebuffersize = RETRO_WIDTH * RETRO_HEIGHT * 2;
-	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_RGB888) {
+	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_XRGB8888) {
 		RETRO.framebuffersize = RETRO_WIDTH * RETRO_HEIGHT * 3;
 	} else if (RETRO.framebufferformat == SDL_PIXELFORMAT_ARGB8888) {
 		RETRO.framebuffersize = RETRO_WIDTH * RETRO_HEIGHT * 4;
@@ -340,20 +346,30 @@ void RETRO_InitFrameBuffer(int format)
 void RETRO_Initialize(void)
 {
 	// Initialize SDL
-	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		RETRO_RageQuit("SDL_Init failed: %s\n", SDL_GetError());
 	}
 
 	// Get current display mode
-	SDL_DisplayMode dm;
-	if (SDL_GetCurrentDisplayMode(0, &dm) != 0) {
+	SDL_DisplayID display = SDL_GetPrimaryDisplay();
+	if (display == 0) {
+		RETRO_RageQuit("SDL_GetPrimaryDisplay failed: %s\n", SDL_GetError());
+	}
+	const SDL_DisplayMode *dm = SDL_GetCurrentDisplayMode(display);
+	if (dm == NULL) {
 		RETRO_RageQuit("SDL_GetCurrentDisplayMode failed: %s\n", SDL_GetError());
 	}
 
 	// Set size of window
+	int window_width = dm->w;
+	int window_height = dm->h;
 	if (RETRO.mode == RETRO_MODE_WINDOW) {
-		dm.w = RETRO_WIDTH;
-		dm.h = RETRO_HEIGHT;
+		window_width = RETRO_WIDTH;
+		window_height = RETRO_HEIGHT;
+	}
+	SDL_WindowFlags window_flags = 0;
+	if (RETRO.mode == RETRO_MODE_FULLWINDOW) {
+		window_flags |= SDL_WINDOW_BORDERLESS;
 	}
 
 	// Create window title
@@ -361,36 +377,48 @@ void RETRO_Initialize(void)
 	snprintf(title, 128, "RETRO - %s", RETRO.basename);
 
 	// Create window
-	RETRO.window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, dm.w, dm.h, 0);
+	RETRO.window = SDL_CreateWindow(title, window_width, window_height, window_flags);
 	if (RETRO.window == NULL) {
 		RETRO_RageQuit("SDL_CreateWindow failed: %s\n", SDL_GetError());
 	}
 
 	// Create renderer
-	unsigned int flags = SDL_RENDERER_ACCELERATED;
-	if (RETRO.vsync) {
-		flags |= SDL_RENDERER_PRESENTVSYNC;
+	RETRO.renderer = SDL_CreateRenderer(RETRO.window, NULL);
+	if (RETRO.renderer == NULL) {
+		RETRO_RageQuit("SDL_CreateRenderer failed: %s\n", SDL_GetError());
 	}
-	if (RETRO.linear) {
-		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-	}
-	RETRO.renderer = SDL_CreateRenderer(RETRO.window, -1, flags);
+	SDL_SetRenderVSync(RETRO.renderer, RETRO.vsync ? 1 : SDL_RENDERER_VSYNC_DISABLED);
 
 	// Stretch screen
 	if (RETRO.stretch == false) {
-		SDL_RenderSetLogicalSize(RETRO.renderer, RETRO_WIDTH, RETRO_HEIGHT);
+		SDL_SetRenderLogicalPresentation(RETRO.renderer, RETRO_WIDTH, RETRO_HEIGHT, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 	}
 
 	// Set fullscreen
 	if (RETRO.mode == RETRO_MODE_FULLSCREEN) {
-		SDL_SetWindowFullscreen(RETRO.window, SDL_WINDOW_FULLSCREEN);
+		if (!SDL_SetWindowFullscreenMode(RETRO.window, dm)) {
+			RETRO_RageQuit("SDL_SetWindowFullscreenMode failed: %s\n", SDL_GetError());
+		}
+		if (!SDL_SetWindowFullscreen(RETRO.window, true)) {
+			RETRO_RageQuit("SDL_SetWindowFullscreen failed: %s\n", SDL_GetError());
+		}
+		SDL_SyncWindow(RETRO.window);
 	}
 
 	// Create render buffer
 	RETRO.renderbuffer = SDL_CreateTexture(RETRO.renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, RETRO_WIDTH, RETRO_HEIGHT);
+	if (RETRO.renderbuffer == NULL) {
+		RETRO_RageQuit("SDL_CreateTexture failed: %s\n", SDL_GetError());
+	}
+	SDL_SetTextureBlendMode(RETRO.renderbuffer, SDL_BLENDMODE_NONE);
+	SDL_SetTextureScaleMode(RETRO.renderbuffer, RETRO.linear ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 
 	// Cursor
-	SDL_ShowCursor(RETRO.showcursor);
+	if (RETRO.showcursor) {
+		SDL_ShowCursor();
+	} else {
+		SDL_HideCursor();
+	}
 
 	// Build Y offset table
 	for (int y = 0; y < RETRO_HEIGHT; y++) {
@@ -423,7 +451,7 @@ void RETRO_Deinitialize(void)
 
 void RETRO_SetVSync(bool state = true)
 {
-	SDL_RenderSetVSync(RETRO.renderer, state);
+	SDL_SetRenderVSync(RETRO.renderer, state ? 1 : SDL_RENDERER_VSYNC_DISABLED);
 	RETRO.vsync = state;
 }
 
@@ -467,7 +495,7 @@ bool RETRO_QuitRequested(void)
 {
 	SDL_PumpEvents();
 	RETRO.keystate = SDL_GetKeyboardState(NULL);
-	if (SDL_QuitRequested()) {
+	if (SDL_PeepEvents(NULL, 0, SDL_PEEKEVENT, SDL_EVENT_QUIT, SDL_EVENT_QUIT) > 0) {
 		return true;
 	} else if (RETRO.quit) {
 		return true;
@@ -494,7 +522,7 @@ void RETRO_Mainloop(void)
 		}
 
 		// Render scene
-		unsigned long int start = SDL_GetTicks64();
+		unsigned long int start = SDL_GetTicks();
 		if (DEMO_Render) {
 			RETRO_Clear();
 			DEMO_Render(deltatime);
@@ -502,7 +530,7 @@ void RETRO_Mainloop(void)
 		} else if (DEMO_Render2) {
 			DEMO_Render2(deltatime);
 		}
-		unsigned long int stop = SDL_GetTicks64();
+		unsigned long int stop = SDL_GetTicks();
 
 		// Limit FPS
 		if (RETRO.fpscap && ((stop - start) < 1000UL / RETRO.fpscap)) {
@@ -511,9 +539,9 @@ void RETRO_Mainloop(void)
 
 		// Show FPS once a second
 		if (RETRO.showfps) {
-			static unsigned long int fpsticks = SDL_GetTicks64();
+			static unsigned long int fpsticks = SDL_GetTicks();
 			static int fpscount = 0;
-			if (fpsticks < SDL_GetTicks64() - 1000UL) {
+			if (fpsticks < SDL_GetTicks() - 1000UL) {
 				char title[128];
 				snprintf(title, 128, "RETRO - %s - FPS: %d", RETRO.basename, fpscount);
 				SDL_SetWindowTitle(RETRO.window, title);

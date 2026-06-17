@@ -1303,7 +1303,7 @@ DWORD Get_Clock(void)
 	// this function returns the current tick count
 
 	// return time
-	return(SDL_GetTicks64());
+	return(SDL_GetTicks());
 
 } // end Get_Clock
 
@@ -5804,7 +5804,7 @@ int T3DLIB_Init16(int pixel_format = DD_PIXEL_FORMAT565)
 		RETRO_InitFrameBuffer(SDL_PIXELFORMAT_RGB565);
 		RGB16Bit = RGB16Bit565;
 	} else if (pixel_format == DD_PIXEL_FORMAT555) {
-		RETRO_InitFrameBuffer(SDL_PIXELFORMAT_RGB555);
+		RETRO_InitFrameBuffer(SDL_PIXELFORMAT_XRGB1555);
 		RGB16Bit = RGB16Bit555;
 	}
 	dd_pixel_format = pixel_format;
@@ -5829,7 +5829,7 @@ int T3DLIB_Init16(int pixel_format = DD_PIXEL_FORMAT565)
 
 int T3DLIB_Init24(int pixel_format = DD_PIXEL_FORMAT888)
 {
-	RETRO_InitFrameBuffer(SDL_PIXELFORMAT_RGB888);
+	RETRO_InitFrameBuffer(SDL_PIXELFORMAT_XRGB8888);
 	RGB16Bit = NULL;
 	dd_pixel_format = pixel_format;
 
